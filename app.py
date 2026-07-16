@@ -12,6 +12,7 @@ MODEL_PATH = "alzheimer_cnn_model.h5"
 # Load the model
 if os.path.exists(MODEL_PATH):
     model = tf.keras.models.load_model(MODEL_PATH)
+    model(tf.zeros((1, 128, 128, 3)))  # "warm up" the model so layer outputs are accessible
     st.success("✅ Model Loaded Successfully!")
 else:
     st.error("❌ Model file not found! Please upload `alzheimer_cnn_model.h5`.")
@@ -34,7 +35,16 @@ def find_last_conv_layer(model):
 
 # Grad-CAM heatmap function
 def grad_cam(model, img_array, layer_name):
-    grad_model = tf.keras.models.Model([model.inputs], [model.get_layer(layer_name).output, model.output])
+    # Explicitly rebuild the forward pass to get reliable layer outputs
+    img_input = tf.keras.Input(shape=img_array.shape[1:])
+    x = img_input
+    conv_output = None
+    for layer in model.layers:
+        x = layer(x)
+        if layer.name == layer_name:
+            conv_output = x
+    grad_model = tf.keras.models.Model(img_input, [conv_output, x])
+
     with tf.GradientTape() as tape:
         conv_outputs, predictions = grad_model(img_array)
         predicted_class = np.argmax(predictions[0])
